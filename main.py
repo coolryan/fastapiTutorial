@@ -1,22 +1,26 @@
 from enum import Enum
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Path, Query
 
 from pydantic import BaseModel
 
 class ModelName(str, Enum):
-	"""docstring for ClassName"""
+	"""docstring for ModelName"""
 	alexnet = "alexnet"
 	resnet = "resnet"
 	lenet = "lenet"
 
 class Item(BaseModel):
-	"""docstring for ClassName"""
+	"""docstring for Item"""
 	name: str
 	description: str | None = None
 	price: float
 	tax: float | None = None
-		
+
+class User(BaseModel):
+	"""docstring for User"""
+	username: str
+	fullname: str | None = None
 
 app = FastAPI()
 
@@ -106,4 +110,93 @@ async def create_item(item_id: int, item: Item, q: str | None = None):
 	if q:
 		result.update({"q": q})
 	return result
-	
+
+#Path Parameters and Numeric Validations
+
+# @app.get("/items/{item_id}")
+# async def read_items(
+# 	item_id: int = Path(title="The ID of the item to get"),
+# 	q: str | None = Query(default=None, alias="item-query"),
+# ):
+# 	results = {"item_id": item_id}
+# 	if q:
+# 		results.update({"q": q})
+# 	return results
+
+@app.get("/items/{item_id}")
+async def read_items(q: str, item_id: int = Path(title="The ID of the item to get")):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	return results
+
+@app.get("/items/{item_id}")
+async def read_items(*, item_id: int = Path(title="The ID of the item to get"), q: str):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	return results
+
+##Number validations: greater than or equal
+@app.get("/items/{item_id}")
+async def read_items(
+    *, item_id: int = Path(title="The ID of the item to get", ge=1), q: str
+):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	return results
+
+##Number validations: greater than and less than or equal
+@app.get("/items/{item_id}")
+async def read_items(
+	*,
+	item_id: int = Path(title="The ID of the item to get", gt=0, le=1000),
+	q: str,
+):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	return results
+
+##Number validations: floats, greater than and less than
+@app.get("/items/{item_id}")
+async def read_items(
+	*,
+	item_id: int = Path(title="The ID of the item to get", gt=0, le=1000),
+	q: str,
+	size: float = Query(gt=0, lt=10.5)
+):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	return results
+
+#Body - Multiple Parameters
+
+##Mix Path, Query and body parameters
+@app.put("/items/{item_id}")
+async def update_item(
+	*,
+    item_id: int = Path(title="The ID of the item to get", ge=0, le=1000),
+    q: str | None = None,
+    item: Item | None = None,
+):
+	results = {"item_id": item_id}
+	if q:
+		results.update({"q": q})
+	if item:
+		results.update({"item": item})
+	return results
+
+##Multiple body parameters
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, item: Item, user: User):
+	results = {"item_id": item_id, "item": item, "user": user}
+	return results
+
+##Singular values in body
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, item: Item, user: User, importance: int = Body()):
+	results = {"item_id": item_id, "item": item, "user": user, "importance": importance}
+	return results
