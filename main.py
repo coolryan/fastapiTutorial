@@ -1,8 +1,17 @@
 from enum import Enum
 
-from fastapi import FastAPI, Path, Query
+from datetime import datetime, time, timedelta
 
-from pydantic import BaseModel
+from uuid import UUID
+
+from fastapi import Body, Cookie, FastAPI, Path, Query, Header
+
+from pydantic import BaseModel, Field, HttpUrl
+
+class Image(BaseModel):
+	"""docstring for Image"""
+	url: HttpUrl
+	name: str
 
 class ModelName(str, Enum):
 	"""docstring for ModelName"""
@@ -13,14 +22,36 @@ class ModelName(str, Enum):
 class Item(BaseModel):
 	"""docstring for Item"""
 	name: str
+	description: str | None = Field(
+		default=None, title="The description of the item", max_length=300
+	)
+	price: float = Field(gt=0, description="The price must be greater than zero")
+	tax: float | None = None
+	tags: list[str] = []
+	image: Image | None = None
+
+class Config:
+	"""docstring for Config"""
+	schema_extra = {
+		"example": {
+			"name": "Foo",
+			"description": "A very nice Item",
+			"price": 35.4,
+			"tax": 3.2,
+		}
+	}
+		
+class Offer(BaseModel):
+	"""docstring for Offer"""
+	name: str
 	description: str | None = None
 	price: float
-	tax: float | None = None
-
+	items: list[Item]
+		
 class User(BaseModel):
 	"""docstring for User"""
 	username: str
-	fullname: str | None = None
+	full_name: str | None = None
 
 app = FastAPI()
 
@@ -190,13 +221,146 @@ async def update_item(
 	return results
 
 ##Multiple body parameters
-@app.put("/items/{item_id}")
+@app.put("/items2/{item_id}")
 async def update_item(item_id: int, item: Item, user: User):
 	results = {"item_id": item_id, "item": item, "user": user}
 	return results
 
-##Singular values in body
-@app.put("/items/{item_id}")
-async def update_item(item_id: int, item: Item, user: User, importance: int = Body()):
-	results = {"item_id": item_id, "item": item, "user": user, "importance": importance}
+#Singular values in body
+# @app.put("/items/{item_id}")
+# async def update_item(item_id: int, item: Item, user: User, importance: int = Body()):
+# 	results = {"item_id": item_id, "item": item, "user": user, "importance": importance}
+# 	return results
+
+#Multiple body params and query
+# @app.put("/items/{item_id}")
+# async def update_item(
+# 	*,
+#     item_id: int,
+#     item: Item,
+#     user: User,
+#     importance: int = Body(gt=0),
+#     q: str | None = None
+# ):
+# 	results = {"item_id": item_id, "item": item, "user": user, "importance": importance}
+# 	if q:
+# 		results.update({"q": q})
+# 	return results
+
+#Embed a single body parameter
+# @app.put("/items/{item_id}")
+# async def update_item(item_id: int, item: Item = Body(embed=True)):
+# 	results = {"item_id": item_id, "item": item}
+# 	return results
+
+#Body - Fields
+# @app.put("/items/{item_id}")
+# async def update_item(item_id: int, item: Item = Body(embed=True)):
+# 	results = {"item_id": item_id, "item": item}
+# 	return results
+
+#Deeply nested models
+@app.post("/offers/")
+async def create_offer(offer: Offer):
+    return offer
+
+#Bodies of pure lists
+@app.post("/images/multiple/")
+async def create_multiple_images(images: list[Image]):
+	return images
+
+#Bodies of arbitrary dicts
+@app.post("/index-weights/")
+async def create_index_weights(weights: dict[int, float]):
+	return weights
+
+#Declare Request Example Data
+##Pydantic schema_extra
+@app.put("/items3/{item_id}")
+async def update_item(
+	item_id: int,
+	item: Item = Body(
+		example={
+			"name": "Foo",
+			"description": "A very nice Item",
+			"price": 35.4,
+			"tax": 3.2,
+		},
+	),
+):
+	results = {"item_id": item_id, "item": item}
 	return results
+
+#Body with multiple examples
+@app.put("/items3/{item_id}")
+async def update_item(
+	*,
+	item_id: int,
+	item: Item = Body(
+		examples={
+			"normal": {
+				"summary": "A normal example",
+				"description": "A **normal** item works correctly.",
+				"value": {
+					"name": "Foo",
+					"description": "A very nice Item",
+					"price": 35.4,
+					"tax": 3.2,
+				},
+			},
+			"converted": {
+				"summary": "An example with converted data",
+				"description": "FastAPI can convert price `strings` to actual `numbers` automatically",
+				"value": {
+					"name": "Bar",
+					"price": "35.4",
+				},
+			},
+			"invalid": {
+				"summary": "Invalid data is rejected with an error",
+				"value": {
+					"name": "Baz",
+					"price": "thirty five point four",
+				},
+			},
+		},
+	),
+):
+	results = {"item_id": item_id, "item": item}
+	return results
+
+#Extra Data Types
+@app.put("/items4/{item_id}")
+async def read_items(
+	item_id: UUID,
+	start_datetime: datetime | None = Body(default=None),
+	end_datetime: datetime | None = Body(default=None),
+	repeat_at: time | None = Body(default=None),
+    process_after: timedelta | None = Body(default=None),
+):
+	start_process = start_datetime + process_after
+	duration = end_datetime - start_process
+	return {
+		"item_id": item_id,
+        "start_datetime": start_datetime,
+        "end_datetime": end_datetime,
+        "repeat_at": repeat_at,
+        "process_after": process_after,
+        "start_process": start_process,
+        "duration": duration,
+	}
+
+#Cookie Parameters
+@app.get("/items2/")
+async def read_items(ads_id: str | None = Cookie(default=None)):
+	return {"ads_id": ads_id}
+
+#Header Parameters
+@app.get("/items2/")
+async def read_items(user_agent: str | None = Header(default=None)):
+	return {"User-Agent": user_agent}
+
+#Duplicate headers
+@app.get("/items2/")
+async def read_items(x_token: list[str] | None = Header(default=None)):
+	return {"X-Token values": x_token}
