@@ -1,3 +1,5 @@
+from typing import Any
+
 from enum import Enum
 
 from datetime import datetime, time, timedelta
@@ -6,8 +8,34 @@ from uuid import UUID
 
 from fastapi import Body, Cookie, FastAPI, Path, Query, Header
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, EmailStr
 
+# class BaseUser(BaseModel):
+# 	"""docstring for BaseUser"""
+# 	username: str
+# 	email: EmailStr
+# 	full_name: str | None = None
+
+class UserIn(BaseModel):
+	"""docstring for UserIn"""
+	username: str
+	password: str
+	email: EmailStr
+	full_name: str | None = None
+
+class UserOut(BaseModel):
+	"""docstring for UserOut"""
+	username: str
+	email: EmailStr
+	full_name: str | None = None
+
+class UserInDB(BaseModel):
+	"""docstring for UserInDB"""
+	username: str
+	hashed_password: str
+	email: EmailStr
+	full_name: str | None = None
+	
 class Image(BaseModel):
 	"""docstring for Image"""
 	url: HttpUrl
@@ -351,7 +379,7 @@ async def read_items(
 	}
 
 #Cookie Parameters
-@app.get("/items2/")
+@app.get("/items_cookies/")
 async def read_items(ads_id: str | None = Cookie(default=None)):
 	return {"ads_id": ads_id}
 
@@ -361,6 +389,45 @@ async def read_items(user_agent: str | None = Header(default=None)):
 	return {"User-Agent": user_agent}
 
 #Duplicate headers
-@app.get("/items2/")
+@app.get("/items_xtoken/")
 async def read_items(x_token: list[str] | None = Header(default=None)):
 	return {"X-Token values": x_token}
+
+#Response Model - Return Type
+@app.post("/items_responseModel/")
+async def item_resposne(item: Item) -> Item:
+	return item
+
+#esponse_model Parameter
+@app.post("/items_responseModel2/", response_model=list[Item])
+async def tem_resposne2() -> Any:
+	return [
+		{"name": "Portal Gun", "price": 42.0},
+        {"name": "Plumbus", "price": 32.0}
+	]
+
+#response_model Priority & Add an output model
+@app.post("/user2/", response_model=UserOut)
+async def create_user(user: UserIn) -> Any:
+	return user
+
+#Return Type and Data Filtering
+# @app.post("/user3/")
+# async def create_user3(user: UserIn) -> BaseUser:
+# 	return user
+
+#Extra Models
+##Multiple models
+def fake_password_hasher(raw_password: str):
+	return "supersecret" + raw_password
+
+def fake_save_user(user_in: UserIn):
+	hashed_password = fake_password_hasher(user_in.password)
+	user_in_db = UserInDB(**user_in.dict(), hashed_password=hashed_password)
+	print("User saved! .. not really")
+	return user_in_db
+
+@app.post("/user4/", response_model=UserOut)
+async def create_user4(user_in: UserIn):
+	user_saved = fake_save_user(user_in)
+	return user_saved
