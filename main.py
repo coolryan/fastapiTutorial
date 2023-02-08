@@ -1,3 +1,5 @@
+from typing import Union
+
 from typing import Any
 
 from enum import Enum
@@ -6,36 +8,48 @@ from datetime import datetime, time, timedelta
 
 from uuid import UUID
 
-from fastapi import Body, Cookie, FastAPI, Path, Query, Header
+from fastapi import Body, Cookie, FastAPI, Path, Query, Header, status, Form
 
 from pydantic import BaseModel, Field, HttpUrl, EmailStr
 
-# class BaseUser(BaseModel):
-# 	"""docstring for BaseUser"""
+class UserBase(BaseModel):
+	"""docstring for UserBase"""
+	username: str
+	email: EmailStr
+	full_name: str | None = None
+
+# class UserIn(BaseModel):
+# 	"""docstring for UserIn"""
+# 	username: str
+# 	password: str
+# 	email: EmailStr
+# 	full_name: str | None = None
+
+class UserIn(UserBase):
+	"""docstring for UserIn"""
+	password: str
+
+# class UserOut(BaseModel):
+# 	"""docstring for UserOut"""
 # 	username: str
 # 	email: EmailStr
 # 	full_name: str | None = None
 
-class UserIn(BaseModel):
-	"""docstring for UserIn"""
-	username: str
-	password: str
-	email: EmailStr
-	full_name: str | None = None
-
-class UserOut(BaseModel):
+class UserOut(UserBase):
 	"""docstring for UserOut"""
-	username: str
-	email: EmailStr
-	full_name: str | None = None
+	pass
 
-class UserInDB(BaseModel):
+# class UserInDB(BaseModel):
+# 	"""docstring for UserInDB"""
+# 	username: str
+# 	hashed_password: str
+# 	email: EmailStr
+# 	full_name: str | None = None
+
+class UserInDB(UserBase):
 	"""docstring for UserInDB"""
-	username: str
 	hashed_password: str
-	email: EmailStr
-	full_name: str | None = None
-	
+
 class Image(BaseModel):
 	"""docstring for Image"""
 	url: HttpUrl
@@ -82,6 +96,25 @@ class User(BaseModel):
 	full_name: str | None = None
 
 app = FastAPI()
+
+class BaseItem(BaseModel):
+	"""docstring for BaseItem"""
+	description: str
+	type: str
+
+class CarItem(BaseItem):
+	"""docstring for CarItem"""
+	type = "car"
+
+class PlaneItem(BaseItem):
+	"""docstring for PlaneItem"""
+	type = "plane"
+	size: int
+
+# class Item2(BaseModel):
+# 	"""docstring for Item2"""
+# 	name: str
+# 	description: str
 
 fake_item_db = [{"item_name": "Foo"}, {"item_name": "Bar"}, {"item_name": "Baz"}]
 
@@ -431,3 +464,42 @@ def fake_save_user(user_in: UserIn):
 async def create_user4(user_in: UserIn):
 	user_saved = fake_save_user(user_in)
 	return user_saved
+
+#Union or anyOf
+items = {
+	"item1": {"description": "All my friends drive a low rider", "type": "car"},
+	"item2": {
+		"description": "Music is my aeroplane, it's my aeroplane",
+		"type": "plane",
+		"size": 5,
+	},
+}
+
+@app.get("/item5/{item_id}", response_model=Union[PlaneItem, CarItem])
+async def vehicle_description(item_id: str):
+	return items[item_id]
+
+# #List of models
+# items2 = [
+#     {"name": "Foo", "description": "There comes my hero"},
+#     {"name": "Red", "description": "It's my aeroplane"},
+# ]
+
+# #Response with arbitrary dict
+# @app.get("/keyword-weights/", response_model=dict[str, float])
+# async def read_keyword_weights():
+# 	return items2
+
+#Response Status Code
+@app.post("/items2/", status_code=201)
+async def create_item2(name: str):
+	return {"name": name}
+
+@app.post("/items3/", status_code=status.HTTP_201_CREATED)
+async def create_item3(name: str):
+	return {"name": name}
+
+#Import Form
+@app.post("/login/")
+async def login(username: str = Form(), password: str = Form()):
+	return {"username": username}
