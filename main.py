@@ -8,7 +8,20 @@ from datetime import datetime, time, timedelta
 
 from uuid import UUID
 
-from fastapi import Body, Cookie, FastAPI, Path, Query, Header, status, Form
+from fastapi import Body, Cookie, FastAPI, Path, Query, Header, status, Form, File, UploadFile, HTTPException, Request
+
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+
+from fastapi.exceptions import RequestValidationError
+
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from fastapi.encoders import jsonable_encoder
 
 from pydantic import BaseModel, Field, HttpUrl, EmailStr
 
@@ -61,16 +74,24 @@ class ModelName(str, Enum):
 	resnet = "resnet"
 	lenet = "lenet"
 
+fake_db = {}
+
+# class Item(BaseModel):
+# 	"""docstring for Item"""
+# 	name: str
+# 	description: str | None = Field(
+# 		default=None, title="The description of the item", max_length=300
+# 	)
+# 	price: float = Field(gt=0, description="The price must be greater than zero")
+# 	tax: float | None = None
+# 	tags: list[str] = []
+# 	image: Image | None = None
+
 class Item(BaseModel):
 	"""docstring for Item"""
-	name: str
-	description: str | None = Field(
-		default=None, title="The description of the item", max_length=300
-	)
-	price: float = Field(gt=0, description="The price must be greater than zero")
-	tax: float | None = None
-	tags: list[str] = []
-	image: Image | None = None
+	title: str
+	timestamp: datetime
+	description: str | None = None
 
 class Config:
 	"""docstring for Config"""
@@ -95,6 +116,11 @@ class User(BaseModel):
 	username: str
 	full_name: str | None = None
 
+class UnicornException(Exception):
+	"""docstring for UnicornException"""
+	def __init__(self, name: str):
+		self.name = name
+
 app = FastAPI()
 
 class BaseItem(BaseModel):
@@ -115,6 +141,11 @@ class PlaneItem(BaseItem):
 # 	"""docstring for Item2"""
 # 	name: str
 # 	description: str
+
+class Tags(Enum):
+	"""docstring for Tags"""
+	items = "items"
+	users = "users"
 
 fake_item_db = [{"item_name": "Foo"}, {"item_name": "Bar"}, {"item_name": "Baz"}]
 
@@ -503,3 +534,157 @@ async def create_item3(name: str):
 @app.post("/login/")
 async def login(username: str = Form(), password: str = Form()):
 	return {"username": username}
+
+#Request Files
+@app.post("/files/")
+async def create_file(file: bytes = File()):
+	return {"file_size": len(file)}
+
+@app.post("/uploadfile/")
+async def create_upload_file(file: UploadFile):
+	return {"filename": file.filename}
+
+#UploadFile with Additional Metadata
+@app.post("/files2/")
+async def create_file2(file: bytes = File(description="A file read as bytes")):
+	return {"file_size": len(file)}
+
+@app.post("/uploadfile2/")
+async def create_upload_file2(
+    file: UploadFile = File(description="A file read as UploadFile"),
+):
+	return {"filename": file.filename}
+
+#Multiple File Uploads
+@app.post("/files3/")
+async def create_files3(files: list[bytes] = File()):
+	return {"file_sizes": [len(file) for file in files]}
+
+@app.post("/uploadfiles3/")
+async def create_upload_files3(files: list[UploadFile]):
+	return {"filenames": [file.filename for file in files]}
+
+@app.get("/")
+async def main():
+	content = """ 
+		<body>
+			<form action="/files3/" enctype="multipart/form-data" method="post">
+				<input name="files" type="file" multiple>
+				<input type="submit">
+			</form>
+			<form action="/uploadfiles3/" enctype="multipart/form-data" method="post">
+				<input name="files" type="file" multiple>
+				<input type="submit">
+			</form>
+		</body>
+	"""
+	return HTMLResponse(content=content)
+
+#Request Forms and Files
+@app.post("/files4/")
+async def create_file4(
+    file: bytes = File(), fileb: UploadFile = File(), token: str = Form()
+):
+    return {
+        "file_size": len(file),
+        "token": token,
+        "fileb_content_type": fileb.content_type,
+    }
+
+#Use HTTPException
+items2 = {"foo": "The Foo Wrestlers"}
+@app.get("/items6/{item_id}")
+async def read_item6(item_id: str):
+	if item_id not in items2:
+		raise HTTPException(status_code=404, detail="Item not found", headers={"X-Error": "There goes my error"},)
+	return {"item": items2[item_id]}
+
+#Install custom exception handlers
+@app.exception_handler(UnicornException)
+async def unicorn_exception_handler(request: Request, exc: UnicornException):
+    return JSONResponse(
+        status_code=418,
+        content={"message": f"Oops! {exc.name} did something. There goes a rainbow..."},
+    )
+
+@app.get("/unicorns/{name}")
+async def read_unicorn(name: str):
+    if name == "yolo":
+        raise UnicornException(name=name)
+    return {"unicorn_name": name}
+
+#Re-use FastAPI's exception handlers
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request, exc):
+    print(f"OMG! An HTTP error!: {repr(exc)}")
+    return await http_exception_handler(request, exc)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    print(f"OMG! The client sent invalid data!: {exc}")
+    return await request_validation_exception_handler(request, exc)
+
+@app.get("/items7/{item_id}")
+async def read_item_execptions(item_id: int):
+    if item_id == 3:
+        raise HTTPException(status_code=418, detail="Nope! I don't like 3.")
+    return {"item_id": item_id}
+
+#Use the RequestValidationError body
+@app.get("/items/", tags=[Tags.items])
+async def get_items():
+	return ["Portal gun", "Plumbus"]
+
+@app.get("/users/", tags=[Tags.users])
+async def read_users():
+    return ["Rick", "Morty"]
+
+#Summary and description
+@app.post(
+    "/items/",
+    response_model=Item,
+    summary="Create an item",
+    description="Create an item with all the information, name, description, price, tax and a set of unique tags",
+)
+async def create_item(item: Item):
+    return item
+
+#Description from docstring
+@app.post("/items/", response_model=Item, summary="Create an item")
+async def create_item(item: Item):
+	""" 
+	Create an item with all the information:
+
+	- **name**: each item must have a name
+	- **description**: a long description
+	- **price**: required
+	- **tax**: if the item doesn't have tax, you can omit this
+	- **tags**: a set of unique tag strings for this item
+	"""
+	return item
+
+#Response description
+@app.post(
+    "/items/",
+    response_model=Item,
+    summary="Create an item",
+    response_description="The created item",
+)
+async def create_item(item: Item):
+	""" 
+	Create an item with all the information:
+
+	- **name**: each item must have a name
+	- **description**: a long description
+	- **price**: required
+	- **tax**: if the item doesn't have tax, you can omit this
+	- **tags**: a set of unique tag strings for this item
+	"""
+	return item
+
+#JSON Compatible Encoder
+##Using the jsonable_encoder
+@app.put("/items/{id}")
+def update_item(id: str, item: Item):
+    json_compatible_item_data = jsonable_encoder(item)
+    fake_db[id] = json_compatible_item_data
