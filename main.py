@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 
 from uuid import UUID
 
-from fastapi import Body, Cookie, FastAPI, Path, Query, Header, status, Form, File, UploadFile, HTTPException, Request
+from fastapi import Body, Cookie, Depends, FastAPI, Path, Query, Header, status, Form, File, UploadFile, HTTPException, Request
 
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -688,3 +688,78 @@ async def create_item(item: Item):
 def update_item(id: str, item: Item):
     json_compatible_item_data = jsonable_encoder(item)
     fake_db[id] = json_compatible_item_data
+
+#Body - Updates
+##Update replacing with PUT
+class Item3(BaseModel):
+	"""docstring for Item3"""
+	name: str | None = None
+	description: str | None = None
+	price: float | None = None
+	tax: float = 10.5
+	tags: list[str] = []
+	
+items3 = {
+    "foo": {"name": "Foo", "price": 50.2},
+    "bar": {"name": "Bar", "description": "The bartenders", "price": 62, "tax": 20.2},
+    "baz": {"name": "Baz", "description": None, "price": 50.2, "tax": 10.5, "tags": []},
+}
+
+@app.get("/items8/{item_id}", response_model=Item3)
+async def read_item(item_id: str):
+    return items3[item_id]
+
+@app.put("/items8/{item_id}", response_model=Item3)
+async def update_item(item_id: str, item: Item3):
+    update_item_encoded = jsonable_encoder(items3)
+    items3[item_id] = update_item_encoded
+    return update_item_encoded
+
+@app.patch("/items9/{item_id}", response_model=Item3)
+async def update_item(item_id: str, item: Item3):
+    stored_item_data = items3[item_id]
+    stored_item_model = Item3(**stored_item_data)
+    update_data = item.dict(exclude_unset=True)
+    updated_item = stored_item_model.copy(update=update_data)
+    items3[item_id] = jsonable_encoder(updated_item)
+    return updated_item
+
+#Dependencies - First Steps
+async def common_parameters(q: str | None = None, skip: int = 0, limit: int = 100):
+    return {"q": q, "skip": skip, "limit": limit}
+
+@app.get("/items10/")
+async def read_items3(commons: dict = Depends(common_parameters)):
+    return commons
+
+@app.get("/users2/")
+async def read_users(commons: dict = Depends(common_parameters)):
+    return commons
+
+#Classes as Dependencies
+##Classes as dependencies
+class Cat:
+	"""docstring for Cat"""
+	def __init__(self, name: str):
+		self.name = name
+
+fluffy = Cat(name="Mr Fluffy")
+
+fake_items_db2 = [{"item_name": "Foo"}, {"item_name": "Bar"}, {"item_name": "Baz"}]
+
+class CommonQueryParams:
+	"""docstring for CommonQueryParams"""
+	def __init__(self, q: str | None = None, skip: int = 0, limit: int = 100):
+		self.q = q
+		self.skip = skip
+		self.limit = limit
+
+@app.get("/items11/")
+async def read_Common_items(commons: CommonQueryParams = Depends(CommonQueryParams)):
+    response = {}
+    if commons.q:
+        response.update({"q": commons.q})
+    items = fake_items_db2[commons.skip : commons.skip + commons.limit]
+    response.update({"items": items})
+    return response
+		
