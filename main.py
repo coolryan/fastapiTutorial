@@ -772,4 +772,100 @@ async def read_Common_items(commons: CommonQueryParams = Depends()):
     items = fake_items_db2[commons.skip : commons.skip + commons.limit]
     response.update({"items": items})
     return response
-    
+
+#Sub-dependencies
+def query_extractor(q: str | None = None):
+	return q
+
+def query_or_cookie_extractor(
+	q: str = Depends(query_extractor), last_query: str | None = Cookie(default=None)
+):
+	if not q:
+		return last_query
+	return q
+
+@app.get("/items13/")
+async def read_query(query_or_default: str = Depends(query_or_cookie_extractor)):
+    return {"q_or_cookie": query_or_default}
+
+#Using the same dependency multiple times
+# async def needy_dependency(fresh_value: str = Depends(get_value, use_cache=False)):
+# 	return {"fresh_value": fresh_value}
+
+#Dependencies in path operation decorators
+##Add dependencies to the path operation decorator
+async def verify_token(x_token: str = Header()):
+	if x_token != "fake-super-secret-token":
+		raise HTTPException(status_code=400, detail="X-Token header invalid")
+
+async def verify_key(x_key: str = Header()):
+	if x_key != "fake-super-secret-key":
+		raise HTTPException(status_code=400, detail="X-Key header invalid")
+	return x_key
+
+@app.get("/items15/", dependencies=[Depends(verify_token), Depends(verify_key)])
+async def read_token_key_items():
+	return [{"item": "Foo"}, {"item": "Bar"}]
+
+#Global Dependencies
+app = FastAPI(dependencies=[Depends(verify_token), Depends(verify_key)])
+
+@app.get("/items16/")
+async def read_items_depends():
+    return [{"item": "Portal Gun"}, {"item": "Plumbus"}]
+
+@app.get("/users5/")
+async def read_users():
+    return [{"username": "Rick"}, {"username": "Morty"}]
+
+#Dependencies with yield
+##A database dependency with yield
+async def get_db():
+	db = DBSession()
+	try:
+		yield db
+	finally:
+		db.close()
+#Sub-dependencies with yield
+async def dependency_a():
+	dep_a = generate_dep_a()
+	try:
+		yield dep_a
+	finally:
+		dep_a.close()
+
+async def dependency_b(dep_a=Depends(dependency_a)):
+	dep_b = generate_dep_b()
+	try:
+		yield dep_b
+	finally:
+		dep_b.close(dep_a)
+
+async def dependency_c(dep_b=Depends(dependency_b)):
+	dep_c = generate_dep_c()
+	try:
+		yield dep_c
+	finally:
+		dep_c.close(dep_b)
+
+#Dependencies with yield and HTTPException
+#Context Managers
+with open("./fake_fastapi.txt") as f:
+	contents = f.read()
+	print(contents)
+
+#Using context managers in dependencies with yield
+class MySuperContextManager:
+	"""docstring for MySuperContextManager"""
+	def __init__(self):
+		self.db = DBSession()
+
+	def __enter__(self):
+		return self.db
+
+	def __exit__(self, exc_type, exc_value, traceback):
+		self.db.close()
+
+async def get_db():
+	with MySuperContextManager() as db:
+		yield db
