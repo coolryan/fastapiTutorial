@@ -15,6 +15,11 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
+
+from jose import JWTError, jwt
+
+from passlib.context import CryptContext
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -882,6 +887,12 @@ fake_users_db = {
 	},
 }
 
+#to get a string like this run:
+#openssl rand -hex 32
+SECRET_KEY = "77752496302ba870b1f22b0e0f5a56f6bfa83e8b5eafb298b819c74058d0db39"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 #Security - First Steps
 app2 = FastAPI()
 
@@ -961,3 +972,116 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 @app2.get("/users/me")
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
 	return current_user
+
+#OAuth2 with Password (and hashing), Bearer with JWT tokens
+class Token(BaseModel):
+	access_token: str
+	token_type: str
+
+class TokenData(BaseModel):
+	"""docstring for TokenData"""
+	username: str | None = None
+		
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def verify_password(plain_password, hashed_password):
+	return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+	return pwd_context.hash(password)
+
+def authenticate_user(fake_db, username: str, password: str):
+	user = get_user(fake_db, username)
+	if not user:
+		return False
+	if not verify_password(password, user.hashed_password):
+		return False
+	return user
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+	to_decode = data.copy()
+	if expires_delta:
+		expire = datetime.utcnow() + expires_delta
+	else:
+		expire = datetime.utcnow() + timedelta(minutes=15)
+	to_decode.update({"exp": expire})
+	encoded_jwt = jwt.encode(to_decode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user2(token: str = Depends(oauth2_scheme)):
+	credentials_exception = HTTPException(
+		status_code = status.HTTP_401_UNAUTHORIZED,
+		detail ="Could not validate credentials",
+		headers = {"WWW-Authenticate": "Bearer"},
+	)
+	try:
+		payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+		username: str = payload.get("sub")
+		if username is None:
+			raise credentials_exception
+		token_data = TokenData(username=username)
+	except JWTError:
+		raise credentials_exception
+	user = get_user(fake_users_db, username=token_data.username)
+	if user is None:
+		raise credentials_exception
+	return user
+
+async def get_current_active_user2(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+@app2.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+        	status_code = status.HTTP_401_UNAUTHORIZED,
+		    detail ="Could not validate credentials",
+		    headers = {"WWW-Authenticate": "Bearer"},
+		    )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+    	data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": user.username, "token_type": "bearer"}
+
+@app2.get("/users/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+	return current_user
+
+@app2.get("/users/me/items/")
+async def read_own_items(current_user: User = Depends(get_current_active_user)):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
+#Middleware
+# @app2.middleware("http")
+# async def add_process_time_header(request: Request, call_next):
+# 	start_time = time.time()
+# 	response = await call_next(request)
+# 	process_time = time.time() - start_time
+# 	response.headers["X-Process-Time"] - str(process_time)
+# 	return response
+
+#CORS (Cross-Origin Resource Sharing)
+##Use CORSMiddleware
+origins = [
+	"http://localhost.tiangolo.com",
+	"https://localhost.tiangolo.com",
+	"http://localhost",
+	"http://localhost:8080",
+]
+
+app2.add_middleware(
+	CORSMiddleware,
+	allow_origins = origins,
+	allow_credentials = True,
+	allow_methods = ["*"],
+	allow_headers = ["*"],
+)
+
+@app2.get("/")
+async def main():
+	return {"message": "Hello World"}
