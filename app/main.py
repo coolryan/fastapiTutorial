@@ -1,7 +1,7 @@
 # "main" module, e.g. import app.main
 #The main FastAPI
 #Import FastAPI
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, APIRouter
 
 from .dependencies import get_query_token, get_token_header
 #Avoid name collisions
@@ -27,3 +27,9 @@ app.include_router(
 @app.get("/")
 async def root():
     return {"message": "Hello Bigger Applications!"}
+
+router = APIRouter()
+
+@router.post("/")
+async def update_admin():
+	return {"message": "admin getting schwify"}
