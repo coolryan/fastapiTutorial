@@ -1089,103 +1089,160 @@
 
 #Background Tasks
 #Using BackgroundTasks
-from fastapi import BackgroundTasks, FastAPI, Depends
+# from fastapi import BackgroundTasks, FastAPI, Depends
+
+# app = FastAPI()
+
+# #Using BackgroundTasks
+# def write_notification(email: str, message=""):
+# 	with open("log.txt", mode="w") as email_file:
+# 		content = f"notifcation for {email}: {message}\n"
+# 		email_file.write(content)
+
+# #Add the background task
+# @app.post("/notifcation/{email}")
+# async def send_notification(email: str, background_tasks: BackgroundTasks):
+# 	background_tasks.add_task(write_notification, email, message="some notifcation")
+# 	return {"message": "Notifcation sent in the background"}
+
+# #Dependency Injection
+# def write_log(message: str):
+# 	with open("log.txt", mode="a") as log:
+# 		log.write(message)
+
+# def get_query(background_tasks: BackgroundTasks, q: str | None = None):
+# 	if q:
+# 		message = f"found query: {q}\n"
+# 		background_tasks.add_task(write_log, message)
+# 	return q
+
+# @app.post("/send_notification2/{email}")
+# async def send_notification2(
+# 	email: str, background_tasks: BackgroundTasks, q: str = Depends(get_query)
+# ):
+# 	message = f"message to {email}\n"
+# 	background_tasks.add_task(write_log, message)
+# 	return {"message": "Message sent"}
+
+# #Metadata and Docs URLs
+# ##Metadata for API
+# description = """ 
+# ChimichangeApp API helps you do awesome stuff.
+
+# ## Items
+
+# You can **read items**.
+
+# ## Users
+
+# You will be able to:
+
+# * **Create users (_not implemented_).
+# * **Read users (_not implemented_).
+# """
+
+# app = FastAPI(
+# 	title = "ChimichangeApp",
+# 	description = description,
+# 	version = "0.0.1",
+# 	terms_of_service = "http://example.com/terms/",
+# 	contact = {
+# 		"name": "Deadpoolio the Amazing",
+# 		"url": "http://x-force.example.com/contact/",
+# 		"email": "dp@x-force.example.com",
+# 	},
+# 	license_info = {
+# 		"name": "Apache 2.0",
+# 		"url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+# 	},
+# )
+
+# @app.get("/items/")
+# async def read_items():
+# 	return [{"name": "Katana"}]
+
+# #Metadata for tags
+# ##Create metadata for tags
+# tag_metadata = [
+# 	{
+# 		"name": "users",
+# 		"description": "Operations with users. The **login** logic is also here.",
+# 	},
+# 	{
+# 		"name": "items",
+# 		"description": "Manage items. So _fancy_ they have their own docs.",
+# 		"externalDocs": {
+# 			"description": "Items external docs",
+# 			"url": "https://fastapi.tiangolo.com/",
+# 		},
+# 	},
+# ]
+
+# app = FastAPI(openapi_tags=tag_metadata)
+
+# #Use your tags
+# @app.get("/users/", tags=["users"])
+# async def get_users():
+# 	return [{"name": "Harry"}, {"name": "Ron"}]
+
+# #Use your tags
+# @app.get("items/", tags=["items"])
+# async def get_items():
+# 	return [{"name": "wand"}, {"name": "flying broom"}]
+
+# #Order of tags
+# app = FastAPI(openapi_url="/api/v1/openapi.json")
+
+# @app.get("/items/")
+# async def read_items():
+#     return [{"name": "Foo"}]
+
+# #Docs URLs
+# app = FastAPI(docs_url="/documentation", redoc_url=None)
+
+# @app.get("/items/")
+# async def read_items():
+#     return [{"name": "Foo"}]
+
+#Static Files
+# from fastapi import FastAPI
+# from fastapi.staticfiles import StaticFiles
+
+# app = FastAPI()
+
+# app.mount("/static", StaticFiles(directory="static"), name="static")
+
+#Testing
+##Using TestClient
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 app = FastAPI()
 
-#Using BackgroundTasks
-def write_notification(email: str, message=""):
-	with open("log.txt", mode="w") as email_file:
-		content = f"notifcation for {email}: {message}\n"
-		email_file.write(content)
+@app.get("/")
+async def read_main():
+    return {"msg": "Hello World"}
 
-#Add the background task
-@app.post("/notifcation/{email}")
-async def send_notification(email: str, background_tasks: BackgroundTasks):
-	background_tasks.add_task(write_notification, email, message="some notifcation")
-	return {"message": "Notifcation sent in the background"}
+client = TestClient(app)
 
-#Dependency Injection
-def write_log(message: str):
-	with open("log.txt", mode="a") as log:
-		log.write(message)
+def test_road_main():
+	response = client.get("/")
+	assert response.status_code == 200
+	assert response.json() == {"msg": "Hello World"}
 
-def get_query(background_tasks: BackgroundTasks, q: str | None = None):
-	if q:
-		message = f"found query: {q}\n"
-		background_tasks.add_task(write_log, message)
-	return q
+#Debugging
+import uvicorn
+from fastapi import FastAPI
 
-@app.post("/send_notification2/{email}")
-async def send_notification2(
-	email: str, background_tasks: BackgroundTasks, q: str = Depends(get_query)
-):
-	message = f"message to {email}\n"
-	background_tasks.add_task(write_log, message)
-	return {"message": "Message sent"}
+app = FastAPI()
 
-#Metadata and Docs URLs
-##Metadata for API
-description = """ 
-ChimichangeApp API helps you do awesome stuff.
+@app.get("/")
+def root():
+    a = "a"
+    b = "b" + a
+    return {"hello world": b}
 
-## Items
+#Call uvicorn
+if __name__ == '__main__':
+	uvicorn.run(app, host="0.0.0.0", port=8000)
 
-You can **read items**.
-
-## Users
-
-You will be able to:
-
-* **Create users (_not implemented_).
-* **Read users (_not implemented_).
-"""
-
-app = FastAPI(
-	title = "ChimichangeApp",
-	description = description,
-	version = "0.0.1",
-	terms_of_service = "http://example.com/terms/",
-	contact = {
-		"name": "Deadpoolio the Amazing",
-		"url": "http://x-force.example.com/contact/",
-		"email": "dp@x-force.example.com",
-	},
-	license_info = {
-		"name": "Apache 2.0",
-		"url": "https://www.apache.org/licenses/LICENSE-2.0.html",
-	},
-)
-
-@app.get("/items/")
-async def read_items():
-	return [{"name": "Katana"}]
-
-#Metadata for tags
-##Create metadata for tags
-tag_metadata = [
-	{
-		"name": "users",
-		"description": "Operations with users. The **login** logic is also here.",
-	},
-	{
-		"name": "items",
-		"description": "Manage items. So _fancy_ they have their own docs.",
-		"externalDocs": {
-			"description": "Items external docs",
-			"url": "https://fastapi.tiangolo.com/",
-		},
-	},
-]
-
-app = FastAPI(openapi_tags=tag_metadata)
-
-#Use your tags
-@app.get("/users/", tags=["users"])
-async def get_users():
-	return [{"name": "Harry"}, {"name": "Ron"}]
-
-#Use your tags
-@app.get("items/", tags=["items"])
-async def get_items():
-	return [{"name": "wand"}, {"name": "flying broom"}]
